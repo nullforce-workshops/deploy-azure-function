@@ -1,0 +1,118 @@
+name: Deploy Azure Functions
+
+env:
+  AZURE_FUNCTIONAPP_NAME: nfexamplefuncapp
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
+  DOTNET_VERSION: '6.*'
+  Location: 'southcentralus'
+  ResourceGroupName: 'nfexamplefuncapp'
+
+on:
+  push:
+    paths:
+      - 'bicep/**'
+      - 'src/**'
+      - 'tests/**'
+
+jobs:
+  info:
+    runs-on: ubuntu-latest
+    steps:
+    - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
+    - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+    - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+    - name: Check out repository code
+      uses: actions/checkout@v3
+    - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
+    - run: echo "🖥️ The workflow is now ready to test your code on the runner."
+    - run: echo "🍏 This job's status is ${{ job.status }}."
+
+  bicep:
+    runs-on: ubuntu-latest
+    outputs:
+      functionAppUrl: ${{ steps.bicep.outputs.functionAppUrl }}
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    
+    - name: Login via Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create Resource Group
+      run: az group create --location ${{ env.Location }} --resource-group ${{ env.ResourceGroupName }}
+
+    - id: bicep
+      uses: azure/arm-deploy@v1
+      with:
+        scope: resourcegroup
+        resourceGroupName: ${{ env.ResourceGroupName }}
+        region: ${{ env.Location }}
+        template: bicep/deploy.bicep
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    - name: Setup dependency caching for faster builds
+      uses: actions/cache@v3
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+    - name: Build with .NET
+      run: dotnet build --configuration Release
+    - name: dotnet publish
+      run: dotnet publish -c Release -o ${{ env.DOTNET_ROOT }}/myapp
+    - name: Upload artifact for deployment job
+      uses: actions/upload-artifact@v3
+      with:
+        name: .net-app
+        path: ${{ env.DOTNET_ROOT }}/myapp
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build, bicep]
+    environment:
+      name: production
+      url: ${{ needs.bicep.outputs.functionAppUrl }}
+    steps:
+    - name: Download artifact from build job
+      uses: actions/download-artifact@v3
+      with:
+        name: .net-app
+
+    - name: Login via Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Deploy to Azure Function App
+      id: fa
+      uses: azure/functions-action@v1
+      with:
+        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+        package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+
+  clean:
+    runs-on: ubuntu-latest
+    needs: deploy
+    environment:
+      name: clean
+    steps:
+    - name: Login via Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Delete Resource Group
+      run: az group delete --resource-group ${{ env.ResourceGroupName }} --yes
