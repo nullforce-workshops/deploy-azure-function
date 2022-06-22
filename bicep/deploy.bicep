@@ -32,6 +32,14 @@ resource funcappstorage 'Microsoft.Storage/storageAccounts@2021-09-01' = {
   }
 }
 
+resource funcappwebconfig 'Microsoft.Web/sites/config@2021-03-01' = {
+  name: 'web'
+  parent: funcapp
+  properties: {
+    netFrameworkVersion: 'v6.0'
+  }
+}
+
 resource funcappsettings 'Microsoft.Web/sites/config@2021-03-01' = {
   name: 'appsettings'
   parent: funcapp
