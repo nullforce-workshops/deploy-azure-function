@@ -1,14 +1,16 @@
 param functionAppName string = 'nfexamplefuncapp'
 param location string = resourceGroup().location
 
+var tags = {
+  'nf-app-type': 'Example'
+}
+
 var storageAccountConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${funcappstorage.name};AccountKey=${listKeys(funcappstorage.id, '2019-06-01').keys[0].value};EndpointSuffix=core.windows.net'
 
 resource hostingPlan 'Microsoft.Web/serverfarms@2021-03-01' = {
   name: 'nfexampleplan'
   location: location
-  tags: {
-    'nf-app-type': 'Example'
-  }
+  tags: tags
   sku: {
     name: 'Y1'
     tier: 'Dynamic'
@@ -16,12 +18,10 @@ resource hostingPlan 'Microsoft.Web/serverfarms@2021-03-01' = {
 }
 
 resource funcappstorage 'Microsoft.Storage/storageAccounts@2021-09-01' = {
-  name: 'nfexamplefuncappstorage'
+  name: 'nffnstorage${uniqueString(resourceGroup().id)}'
   kind: 'StorageV2'
   location: location
-  tags: {
-    'nf-app-type': 'Example'
-  }
+  tags: tags
   sku: {
     name: 'Standard_LRS'
   }
@@ -56,9 +56,7 @@ resource funcapp 'Microsoft.Web/sites@2021-03-01' = {
   name: functionAppName
   kind: 'functionapp'
   location: location
-  tags: {
-    'nf-app-type': 'Example'
-  }
+  tags: tags
   properties: {
     httpsOnly: true
     serverFarmId: hostingPlan.id
